@@ -1,0 +1,32 @@
+## Interface: 50503
+## Title: Carbonite Maps - Mists of Pandaria Classic v12.0.0-00028
+## Version: v12.0.0-00028
+## Author: No one
+## Notes: Released Under GPL
+## DefaultState: Enabled
+## LoadOnDemand: 0
+## SavedVariables: CarbData
+## SavedVariablesPerCharacter: CarbMigr
+## X-Curse-Project-ID: 342147
+## X-WoWI-ID: 25328
+
+Libs\libs.xml
+Locales\Locales.xml
+Taintless.xml
+Carbonite.lua
+
+NxUI.lua
+NxOptions.lua
+NxCom.lua
+NxHUD.lua
+
+Data\mop\data.xml
+Data\mop\NxMapData.lua
+
+NxMap.lua
+
+Data\Shared\NxMapGuide.lua
+
+NxTravel.lua
+
+Carbonite.xml
