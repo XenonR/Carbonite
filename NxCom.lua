@@ -1372,6 +1372,10 @@ function Nx.Com:OnUpdate(elapsed)
         end
 
         -- Clamp position values
+        self.PlyrMapId = self.PlyrMapId or 0
+        self.PlyrX = self.PlyrX or 0
+        self.PlyrY = self.PlyrY or 0
+
         x = max(min(self.PlyrX, .999), 0) * 0xfff
         y = max(min(self.PlyrY, 9.999), 0) * 0xfff
 

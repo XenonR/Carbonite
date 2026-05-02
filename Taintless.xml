@@ -8,6 +8,10 @@ All rights reserved.
 Permission is hereby granted to distribute unmodified copies of this file.
 ]]
 
+if not TextureLoadingGroupMixin then
+	return
+end
+
 local purgeKey do
 	local e = {}
 	function purgeKey(t, k)

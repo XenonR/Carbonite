@@ -32,6 +32,17 @@ local HideFramesOnEsc = {}
 
 -- Compatibility for GetMouseFocus API changes
 local GetMouseFoci = GetMouseFoci or GetMouseFocus
+local GetItemQualityColorCompat = (C_Item and C_Item.GetItemQualityColor) or GetItemQualityColor
+local function SetResizeBoundsCompat(frame, minW, minH, maxW, maxH)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(minW, minH, maxW, maxH)
+    else
+        frame:SetMinResize(minW, minH)
+        if maxW and maxH and frame.SetMaxResize then
+            frame:SetMaxResize(maxW, maxH)
+        end
+    end
+end
 
 -------------------------------------------------------------------------------
 -- UI INITIALIZATION
@@ -47,7 +58,10 @@ function Nx:UIInit()
     self.QualityColors = qc
 
     for n = 0, 8 do        -- Blizzard max is currently 7
-        local r, g, b, hex = C_Item.GetItemQualityColor (n)
+        local r, g, b, hex = GetItemQualityColorCompat (n)
+        if not hex and r and g and b then
+            hex = format ("|cff%02x%02x%02x", r * 255, g * 255, b * 255)
+        end
         qc[n] = hex
     end
 
@@ -1926,7 +1940,7 @@ function Nx.Window:Create (name, minResizeW, minResizeH, secure, titleLines, bor
 
 --    f:SetAttribute ("showstates", "1")
 
-    f:SetResizeBounds (minResizeW or 100, minResizeH or 40)
+    SetResizeBoundsCompat (f, minResizeW or 100, minResizeH or 40)
 
     f:SetWidth (10)
     f:SetHeight (win.TitleH + 50)

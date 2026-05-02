@@ -197,6 +197,7 @@ Guidance:
 
 ## Development Conventions
 
+- Client API Interface is version 30300
 - Keep using the existing `Nx.*` module-table style.
 - Use `local L = LibStub("AceLocale-3.0"):GetLocale("Carbonite")` in files that need localized strings.
 - Prefer existing helper functions and UI primitives from `NxUI.lua` before creating new UI patterns.

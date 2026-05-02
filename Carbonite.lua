@@ -87,33 +87,66 @@ BINDING_NAME_NxMAPSKIPTARGET    = L["NxMAPSKIPTARGET"]
 -- Flags for different WoW client versions
 -------------------------------------------------------------------------------
 
-Nx.isClassic      = (WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE)
-Nx.isClassicEra   = (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC)
-Nx.isTBCClassic   = (WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC)
-Nx.isWotlkClassic = (WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC)
-Nx.isCataClassic  = (WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC)
-Nx.isMoPClassic   = (WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC)
-Nx.isRetail       = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
+local WoWBuild = select(4, GetBuildInfo()) or 0
 
-Nx.OldMapIDs  = select(4, GetBuildInfo()) < 49999
+Nx.isRetail       = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+Nx.isClassicEra   = WOW_PROJECT_ID and WOW_PROJECT_CLASSIC and WOW_PROJECT_ID == WOW_PROJECT_CLASSIC
+Nx.isTBCClassic   = WOW_PROJECT_ID and WOW_PROJECT_BURNING_CRUSADE_CLASSIC and WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC
+Nx.isWotlkClassic = (WOW_PROJECT_ID and WOW_PROJECT_WRATH_CLASSIC and WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC) or
+                    (not WOW_PROJECT_ID and WoWBuild >= 30000 and WoWBuild < 40000)
+Nx.isCataClassic  = WOW_PROJECT_ID and WOW_PROJECT_CATACLYSM_CLASSIC and WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC
+Nx.isMoPClassic   = WOW_PROJECT_ID and WOW_PROJECT_MISTS_CLASSIC and WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC
+Nx.isClassic      = not Nx.isRetail
 
-Nx.TBCMaps    = select(4, GetBuildInfo()) > 19999
-Nx.WOTLKMaps  = select(4, GetBuildInfo()) > 29999
-Nx.CataMaps   = select(4, GetBuildInfo()) > 39999
-Nx.MOPMaps    = select(4, GetBuildInfo()) > 49999
-Nx.WODMaps    = select(4, GetBuildInfo()) > 59999
-Nx.LegionMaps = select(4, GetBuildInfo()) > 69999
-Nx.BFAMaps    = select(4, GetBuildInfo()) > 79999
-Nx.SLMaps     = select(4, GetBuildInfo()) > 89999
-Nx.DFMaps     = select(4, GetBuildInfo()) > 99999
-Nx.TWWMaps    = select(4, GetBuildInfo()) > 109999
-Nx.MidMaps    = select(4, GetBuildInfo()) > 119999
+Nx.OldMapIDs  = WoWBuild < 49999
 
-Nx.BlobsAvailable = select(4, GetBuildInfo()) > 39999
-Nx.OldRidingSkill = select(4, GetBuildInfo()) < 40000
-Nx.MaxPlayerLevel = GetMaxLevelForExpansionLevel(LE_EXPANSION_LEVEL_CURRENT)
+Nx.TBCMaps    = WoWBuild > 19999
+Nx.WOTLKMaps  = WoWBuild > 29999
+Nx.CataMaps   = WoWBuild > 39999
+Nx.MOPMaps    = WoWBuild > 49999
+Nx.WODMaps    = WoWBuild > 59999
+Nx.LegionMaps = WoWBuild > 69999
+Nx.BFAMaps    = WoWBuild > 79999
+Nx.SLMaps     = WoWBuild > 89999
+Nx.DFMaps     = WoWBuild > 99999
+Nx.TWWMaps    = WoWBuild > 109999
+Nx.MidMaps    = WoWBuild > 119999
 
-local IsAddOnLoaded = C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+Nx.BlobsAvailable = WoWBuild > 39999
+Nx.OldRidingSkill = WoWBuild < 40000
+if GetMaxLevelForExpansionLevel and LE_EXPANSION_LEVEL_CURRENT then
+    Nx.MaxPlayerLevel = GetMaxLevelForExpansionLevel(LE_EXPANSION_LEVEL_CURRENT)
+else
+    Nx.MaxPlayerLevel = MAX_PLAYER_LEVEL or (Nx.isWotlkClassic and 80) or 70
+end
+
+local IsAddOnLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+local GetItemInfoCompat = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+
+do
+    local frame = CreateFrame("Frame")
+    local frameMethods = getmetatable(frame).__index
+    if not frame.SetResizeBounds then
+        frameMethods.SetResizeBounds = function(self, minW, minH, maxW, maxH)
+            self:SetMinResize(minW, minH)
+            if maxW and maxH and self.SetMaxResize then
+                self:SetMaxResize(maxW, maxH)
+            end
+        end
+    end
+    if not frame.SetClipsChildren then
+        frameMethods.SetClipsChildren = function()
+        end
+    end
+
+    local texture = frame:CreateTexture()
+    local textureMethods = getmetatable(texture).__index
+    if not texture.SetColorTexture then
+        textureMethods.SetColorTexture = function(self, r, g, b, a)
+            self:SetTexture(r, g, b, a)
+        end
+    end
+end
 
 ---
 -- Get max gathering skill level for the current game version
@@ -172,10 +205,8 @@ function Nx:GetGatherNodeName(typ, index)
     if itemId then
         -- Try to get localized name from game
         local name
-        if C_Item and C_Item.GetItemInfo then
-            name = C_Item.GetItemInfo(itemId)
-        elseif GetItemInfo then
-            name = GetItemInfo(itemId)
+        if GetItemInfoCompat then
+            name = GetItemInfoCompat(itemId)
         end
         if name then
             return name
@@ -1054,7 +1085,7 @@ function Nx.slashCommand (txt)
         local id = format ("Hitem:%s", a1)
         Nx.TooltipText:SetOwner (UIParent, "ANCHOR_LEFT", 0, 0)
         Nx.TooltipText:SetHyperlink (id)
-        local name, iLink, iRarity, lvl, minLvl, type, subType, stackCount, equipLoc, tx = C_Item.GetItemInfo (id)
+        local name, iLink, iRarity, lvl, minLvl, type, subType, stackCount, equipLoc, tx = GetItemInfoCompat (id)
         Nx.prt ("Item: %s %s", name or "nil", iLink or "")
 
     elseif cmd == "kill" then
@@ -2521,7 +2552,7 @@ function Nx:CalcRealmChars()
             end
         end
     end
-    local connectedrealms = GetAutoCompleteRealms()
+    local connectedrealms = GetAutoCompleteRealms and GetAutoCompleteRealms()
     if connectedrealms then
         for i=1,#connectedrealms do
             for rc, v in pairs (chars) do
@@ -4546,7 +4577,7 @@ end
 --
 function Nx.Item:Load (id)
     if not self.Asked[id] then
-        local name, link = C_Item.GetItemInfo (id)
+        local name, link = GetItemInfoCompat (id)
         if name then
             self.Asked[id] = name
         end

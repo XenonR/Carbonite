@@ -42,6 +42,30 @@ local L = LibStub("AceLocale-3.0"):GetLocale("Carbonite")
 -- Extended tooltip library for enhanced tooltips
 local ExtToolTip = LibStub('LibQTip-1.0RS')
 
+local function SetResizeBoundsCompat(frame, minW, minH, maxW, maxH)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(minW, minH, maxW, maxH)
+    else
+        frame:SetMinResize(minW, minH)
+        if maxW and maxH and frame.SetMaxResize then
+            frame:SetMaxResize(maxW, maxH)
+        end
+    end
+end
+
+local function GetDisplayableMapForPlayerCompat()
+    if MapUtil and MapUtil.GetDisplayableMapForPlayer then
+        return MapUtil.GetDisplayableMapForPlayer()
+    end
+    if C_Map and C_Map.GetBestMapForUnit then
+        return C_Map.GetBestMapForUnit("player")
+    end
+    if Nx and Nx.Map then
+        return Nx.Map.RMapId or Nx.Map.UpdateMapID or Nx.Map.MapId or GetCurrentMapAreaID()
+    end
+    return GetCurrentMapAreaID()
+end
+
 -------------------------------------------------------------------------------
 -- CONFIGURATION CONSTANTS
 -------------------------------------------------------------------------------
@@ -297,7 +321,7 @@ function Nx.Map:Init()
 
     -- Sync with Blizzard's world map (skip during combat to avoid taint)
     Nx.Map.UpdateMapID = WorldMapFrame.mapID
-    if Nx.Map.UpdateMapID and not InCombatLockdown() then
+    if Nx.Map.UpdateMapID and WorldMapFrame.SetMapID and not InCombatLockdown() then
         WorldMapFrame:SetMapID(Nx.Map.UpdateMapID)
     end
 end
@@ -308,18 +332,22 @@ end
 -- @param zone  The map ID to display
 --
 function Nx.Map:SetMapByID(zone)
-    -- Only update if world map is not visible and has zoom data
-    if not WorldMapFrame:IsShown() and WorldMapFrame.ScrollContainer.zoomLevels then
-        -- Translate continent IDs for non-MoP Classic clients
+    if not zone or InCombatLockdown() or WorldMapFrame:IsShown() then
+        return
+    end
+
+    if WorldMapFrame.SetMapID and WorldMapFrame.ScrollContainer and WorldMapFrame.ScrollContainer.zoomLevels then
         if Nx.OldMapIDs then
             if zone == 12 then zone = 1414 end      -- Kalimdor
             if zone == 13 then zone = 1415 end      -- Eastern Kingdoms
         end
-        -- Wrap in pcall to catch Blizzard VehicleDataProvider errors
-        -- (their code doesn't handle nil from C_PvP.GetBattlefieldVehicles)
-        -- Skip during combat to avoid taint from Blizzard's quest data providers
-        if not InCombatLockdown() then
-            pcall(WorldMapFrame.SetMapID, WorldMapFrame, zone)
+        pcall(WorldMapFrame.SetMapID, WorldMapFrame, zone)
+    elseif SetMapByID then
+        pcall(SetMapByID, zone)
+    else
+        local info = self.MapWorldInfo[zone]
+        if info and info.Cont and info.Zone and SetMapZoom then
+            pcall(SetMapZoom, info.Cont, info.Zone)
         end
     end
 end
@@ -333,28 +361,43 @@ end
 function Nx.Map:GetMapInfo(mapId)
     if mapId and mapId ~= 0 then
         local mapInfo
+        local function getMapInfo(id)
+            if C_Map and C_Map.GetMapInfo then
+                return C_Map.GetMapInfo(id)
+            end
+
+            local winfo = self.MapWorldInfo and self.MapWorldInfo[id]
+            if winfo then
+                return {
+                    mapID = id,
+                    name = winfo.Name,
+                    mapType = (id == 12 or id == 13) and 2 or 3,
+                    parentMapID = winfo.Cont and Nx.Map.MapZones[0] and Nx.Map.MapZones[0][winfo.Cont],
+                }
+            end
+        end
 
         if Nx.OldMapIDs then
             -- Translate IDs for Classic WoW compatibility
             if mapId == 12 then mapId = 1414 end    -- Kalimdor
             if mapId == 13 then mapId = 1415 end    -- Eastern Kingdoms
 
-            mapInfo = C_Map.GetMapInfo(mapId)
+            mapInfo = getMapInfo(mapId)
 
             -- Reverse translation for continent-level maps (type 2)
-            if mapInfo.mapType == 2 then
+            if mapInfo and mapInfo.mapType == 2 then
                 if mapInfo.mapID == 1414 then mapInfo.mapID = 12 end
                 if mapInfo.mapID == 1415 then mapInfo.mapID = 13 end
             end
 
             -- Reverse translation for zone-level maps (type 3) parent IDs
-            if mapInfo.mapType == 3 then
+            if mapInfo and mapInfo.mapType == 3 then
                 if mapInfo.parentMapID == 1414 then mapInfo.parentMapID = 12 end
                 if mapInfo.parentMapID == 1415 then mapInfo.parentMapID = 13 end
             end
         else
             -- MoP Classic uses standard IDs
-            mapInfo = C_Map.GetMapInfo(mapId)
+            mapInfo = getMapInfo(mapId)
         end
 
         return mapInfo
@@ -904,7 +947,7 @@ function Nx.Map:Create(index)
     f:SetFrameStrata("LOW")
     f:SetWidth(m.W)
     f:SetHeight(m.H)
-    f:SetResizeBounds(50, 50)
+    SetResizeBoundsCompat(f, 50, 50)
     f:SetClipsChildren(true)  -- Clip child frames (icons) at frame edges
 
     -- Background texture
@@ -4836,7 +4879,7 @@ function Nx.Map:UpdateWorld()
         --Nx.Map:RegisterEvent ("WORLD_MAP_UPDATE", "OnEvent")
         -- Use the player's actual zone when mouse is not over the map
         -- This fixes city maps not showing initially (RMapId may not be updated yet)
-        mapId = MapUtil.GetDisplayableMapForPlayer()
+        mapId = GetDisplayableMapForPlayerCompat()
     end
     if not mapId or mapId == 9000 then
         mapId = self:GetCurrentMapId()
@@ -4869,7 +4912,7 @@ function Nx.Map:UpdateWorld()
 
 --    local mapInfo = C_Map.GetMapInfo(mapId)
     local mapInfo = Nx.Map:GetMapInfo(mapId)
-    local mapFileName = winfo.Overlay or (mapInfo.name and mapInfo.name:gsub(" ", "") or "")
+    local mapFileName = winfo.Overlay or (mapInfo and mapInfo.name and mapInfo.name:gsub(" ", "") or winfo.Name and winfo.Name:gsub(" ", "") or "")
     if not mapFileName then
         if Nx.Map:GetCurrentMapContinent() == WORLDMAP_COSMIC_ID then
             mapFileName = "Cosmic"
@@ -5226,7 +5269,7 @@ function Nx.Map:Update (elapsed)
 
         plZX = plZX * 100
         plZY = plZY * 100
-        PLMapID = MapUtil.GetDisplayableMapForPlayer()
+        PLMapID = GetDisplayableMapForPlayerCompat()
 
         if Nx.OldMapIDs then
             if PLMapID == 1414 then PLMapID = 12 end
@@ -7228,7 +7271,7 @@ function Nx.Map:CalcTracking()
 
     local srcX = self.PlyrX
     local srcY = self.PlyrY
-    local srcMapId = MapUtil.GetDisplayableMapForPlayer()
+    local srcMapId = GetDisplayableMapForPlayerCompat()
 
     -- Build path through all targets
     for n, tar in ipairs(self.Targets) do
@@ -7954,7 +7997,7 @@ local function GetCachedExploredTextures(mapId, forceRefresh)
     end
 
     local exploredWHXY = {}
-    local explored = C_MapExplorationInfo.GetExploredMapTextures(mapId)
+    local explored = C_MapExplorationInfo and C_MapExplorationInfo.GetExploredMapTextures and C_MapExplorationInfo.GetExploredMapTextures(mapId)
     if explored then
         for i, ex in ipairs(explored) do
             local key = ex.offsetX..","..ex.offsetY..","..ex.textureWidth..","..ex.textureHeight
@@ -8032,8 +8075,12 @@ function Nx.Map:GetExploredOverlayNum()
 
 --    local overlayNum = GetNumMapOverlays()        -- Cartographer makes this return 0
 
-    local overlays = C_MapExplorationInfo.GetExploredMapTextures(C_Map.GetBestMapForUnit('player') or 0)
-    return overlays and #overlays or 0
+    if C_MapExplorationInfo and C_MapExplorationInfo.GetExploredMapTextures then
+        local mapId = GetDisplayableMapForPlayerCompat()
+        local overlays = C_MapExplorationInfo.GetExploredMapTextures(mapId or 0)
+        return overlays and #overlays or 0
+    end
+    return 0
 end
 
 function Nx.Map:UpdateOverlayUnexplored()
@@ -11470,6 +11517,7 @@ function Nx.Map:InitTables()
     --V403
 
     if Nx.WOTLKMaps then
+        self.ZoneOverlays["lakewintergrasp"] = self.ZoneOverlays["lakewintergrasp"] or {}
         self.ZoneOverlays["lakewintergrasp"]["lakewintergrasp"] = "0,0,1024,768"
     end
 
@@ -11924,11 +11972,11 @@ end
 -- Set the map to current zone
 
 function Nx.Map:SetToCurrentZone()
-    Nx.Map:SetMapByID(MapUtil.GetDisplayableMapForPlayer())
+    Nx.Map:SetMapByID(GetDisplayableMapForPlayerCompat())
 end
 
 function Nx.Map:GetCurrentMapAreaID()
-    local displayableMapID = MapUtil.GetDisplayableMapForPlayer()
+    local displayableMapID = GetDisplayableMapForPlayerCompat()
     local mapID = Nx.Map.MouseOver and WorldMapFrame:GetMapID() or displayableMapID
 
     local _, instanceType = GetInstanceInfo()
@@ -12053,7 +12101,7 @@ function Nx.Map:GotoCurrentZone()
         self:Move (self.PlyrX, self.PlyrY, 20, 15)
     else
         self:SetToCurrentZone()
-        local mapId = MapUtil.GetDisplayableMapForPlayer()
+        local mapId = GetDisplayableMapForPlayerCompat()
         if Nx.OldMapIDs then
             if mapId == 1414 then mapId = 12 end
             if mapId == 1415 then mapId = 13 end
@@ -12131,6 +12179,10 @@ end
 local ContZoneCache = {}
 
 function Nx.Map:IdToContZone (mapId)
+    if not mapId then
+        return 90, 0
+    end
+
     local info = self.MapWorldInfo[mapId]
     if info then
         return info.Cont or 90, info.Zone or 0
@@ -12142,7 +12194,7 @@ function Nx.Map:IdToContZone (mapId)
     end
 
     -- Try to get parent map info for cities/sub-zones (cache result)
-    local mapInfo = C_Map.GetMapInfo(mapId)
+    local mapInfo = Nx.Map:GetMapInfo(mapId)
     if mapInfo and mapInfo.parentMapID then
         info = self.MapWorldInfo[mapInfo.parentMapID]
         if info then
@@ -12238,7 +12290,7 @@ function Nx.Map:IsMicroDungeon(mapId)
         return MicroDungeonCache[mapId]
     end
 
-    local mapInfo = C_Map.GetMapInfo(mapId)
+    local mapInfo = Nx.Map:GetMapInfo(mapId)
     -- mapType 5 = Enum.UIMapType.Micro (Micro Dungeon)
     local isMicro = mapInfo and mapInfo.mapType == 5
     MicroDungeonCache[mapId] = isMicro or false
@@ -12330,6 +12382,10 @@ end
 -- (id)
 
 function Nx.Map:GetWorldZone (mapId)
+    if not mapId then
+        return {}
+    end
+
     if self.MapWorldInfo[mapId] then
         return self.MapWorldInfo[mapId]
     end
@@ -12340,11 +12396,11 @@ function Nx.Map:GetWorldZone (mapId)
     end
 
     -- Try to get parent map info for cities/sub-zones (cache result)
-    local mapInfo = C_Map.GetMapInfo(mapId)
+    local mapInfo = Nx.Map:GetMapInfo(mapId)
     if mapInfo and mapInfo.parentMapID then
         local parentInfo = self.MapWorldInfo[mapInfo.parentMapID]
         if parentInfo then
-            local isCityType = mapInfo.mapType == Enum.UIMapType.Zone or mapInfo.mapType == Enum.UIMapType.Orphan
+            local isCityType = mapInfo.mapType == 3 or (Enum and Enum.UIMapType and mapInfo.mapType == Enum.UIMapType.Orphan)
             if isCityType and parentInfo.City then
                 ParentMapCache[mapId] = parentInfo
                 return parentInfo

@@ -1,16 +1,13 @@
-## Interface: 120000, 120001
-## Title: Carbonite Maps - Retail v12.0.0-00028
+## Interface: 30300
+## Title: Carbonite Maps - Classic v12.0.0-00028
 ## Version: v12.0.0-00028
 ## Author: No one
 ## Notes: Released Under GPL
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
+## Dependencies: Ace3
 ## SavedVariables: CarbData
-## IconTexture: Interface\AddOns\Carbonite\Gfx\MMBut.tga
-## OptionalDeps: Carbonite-media-en, Carbonite-media-de, Carbonite-media-es, Carbonite-media-esmx, Carbonite-media-fr, Carbonite-media-it, Carbonite-media-ko, Carbonite-media-pt, Carbonite-media-ru, Carbonite-media-zhcn, Carbonite-media-zhtw
-
-## X-WoWI-ID: 12965
-## X-Curse-Project-ID: 28460
+## SavedVariablesPerCharacter: CarbMigr
 
 Libs\libs.xml
 Locales\Locales.xml
@@ -22,8 +19,8 @@ NxOptions.lua
 NxCom.lua
 NxHUD.lua
 
-Data\retail\data.xml
-Data\retail\NxMapData.lua
+Data\classic\data.xml
+Data\classic\NxMapData.lua
 
 NxMap.lua
 
